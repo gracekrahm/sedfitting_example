@@ -1,0 +1,29 @@
+#! /bin/bash
+#SBATCH --job-name=fit_sn74_test
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=gkrahm@ufl.edu
+#SBATCH --time=48:00:00
+#SBATCH --tasks-per-node=1 #4
+#SBATCH --output=%x.output
+#SBATCH --error=%x.error
+#SBATCH --nodes=1
+#SBATCH --mem-per-cpu=3800
+#SBATCH --account=narayanan
+#SBATCH --qos=narayanan#-b
+#SBATCH --array=0,6
+
+module purge
+module load intel/2020.0.166
+module load git
+module load hdf5/1.14.1
+module load openmpi/4.1.5
+
+
+
+galaxy=$SLURM_ARRAY_TASK_ID 
+
+echo "fitting galaxy ${galaxy}"
+python run_prosp.py $galaxy 
+
+echo "plotting sed for galaxy ${galaxy}"
+python plot_seds.py $galaxy
