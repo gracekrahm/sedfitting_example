@@ -173,46 +173,27 @@ filternames = (hst_wfc3_uv+hst_wfc3_ir+jwst_nircam + jwst_miri + galex + spitzer
 #-------------------
 
 
-def build_obs(pd_dir,**kwargs):
+def build_obs(galaxy,**kwargs):
     print('loading obs')
     import sedpy
     from astropy import units as u
     from astropy import constants
-    from astropy.cosmology import FlatLambdaCDM    
-    from hyperion.model import ModelOutput
-    cosmo = FlatLambdaCDM(H0=68, Om0=0.3, Tcmb0=2.725)
-    try:
-        m = ModelOutput(pd_dir)
-    except:
-        print(pd_dir, 'failed')
-        m = ModelOutput(pd_dir)
-    wav,flux = m.get_sed(inclination=0,aperture=-1)
-    wav  = np.asarray(wav)*u.micron 
-    wav = wav.to(u.AA)
-    flux = np.asarray(flux)*u.erg/u.s
-    if float(zred) == 0.0:
-        dl = (10*u.pc).to(u.cm)
-    else:
-        dl = cosmo.luminosity_distance(zred).to('cm')
-    flux /= (4.*3.14*dl**2.)
-    nu = constants.c.cgs/(wav.to(u.cm))
-    nu = nu.to(u.Hz)
-    flux /= nu
-    flux = flux.to(u.Jy)
-    maggies = flux / 3631.
+
+    dfsed = pd.read_csv(f'sed_gal{galaxy}.txt')
+    maggies = dfsed['maggies']
+    redshifted_wav = dfsed['wav']#*u.AA
 
     filters_unsorted = load_filters(filternames)
     waves_unsorted = [x.wave_mean for x in filters_unsorted]
     filters = [x for _,x in sorted(zip(waves_unsorted,filters_unsorted))]
     flx = []
     flxe = []
-    redshifted_wav = wav*(1.+zred)
     for i in range(len(filters)):
         flux_range = []
         wav_range = []
         for j in filters[i].wavelength:
-            flux_range.append(maggies[find_nearest(redshifted_wav.value,j)].value)
-            wav_range.append(redshifted_wav[find_nearest(redshifted_wav.value,j)].value)
+            flux_range.append(maggies[find_nearest(redshifted_wav,j)])
+            wav_range.append(redshifted_wav[find_nearest(redshifted_wav,j)])
         a = np.trapz(wav_range * filters[i].transmission* flux_range, wav_range, axis=-1)
         b = np.trapz(wav_range * filters[i].transmission, wav_range)
         flx.append(a/b)
@@ -241,9 +222,9 @@ def build_obs(pd_dir,**kwargs):
 #-------------------
 
 
-def build_all(pd_dir,zred,argv_alpha,**kwargs):
+def build_all(galaxy,zred,argv_alpha,**kwargs):
 
-    return (build_obs(pd_dir,**kwargs), build_model(zred,argv_alpha, **kwargs),
+    return (build_obs(galaxy,**kwargs), build_model(zred,argv_alpha, **kwargs),
             build_sps(**kwargs), build_noise(**kwargs))
 
 
@@ -270,15 +251,10 @@ if __name__ == '__main__':
     galaxy = int(sys.argv[1])
     argv_alpha = 0.7
     zred = 6.014
-    import glob
-    filename = glob.glob(parent_dir+'*rtout.sed', recursive=True)[0]
-    prefix = filename.split('.galaxy')[0]
-    pds = prefix+'.galaxy'+str(galaxy)+'.rtout.sed'
-    pd_dir = parent_dir + pds
-    obs, model, sps, noise = build_all(pd_dir,zred,argv_alpha,**run_params)
+    obs, model, sps, noise = build_all(galaxy,zred,argv_alpha,**run_params)
     run_params["sps_libraries"] = sps.ssp.libraries
     run_params["param_file"] = __file__
-    hfile = output_dir + 'galaxy'+str(galaxy)+'_test.h5'
+    hfile = output_dir + 'galaxy'+str(galaxy)+'.h5'
     print('Running fits')
     output = fit_model(obs, model, sps, noise, **run_params)
     print('Done. Writing now')
